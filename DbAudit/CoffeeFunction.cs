@@ -1,9 +1,12 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Net.Http;
 using System.Threading.Tasks;
 using CoffeeDB;
+using CoffeeDB.Models;
 using Microsoft.Azure.Documents;
+using Microsoft.Azure.Documents.Client;
 using Microsoft.Azure.WebJobs;
 using Microsoft.Azure.WebJobs.Host;
 using Microsoft.Extensions.Logging;
@@ -25,6 +28,9 @@ namespace DbAudit
         {
             if (input != null && input.Count > 0)
             {
+                DocumentClient docClient = new DocumentClient(new Uri("https://userdatabase.documents.azure.com:443/"), "TeGmsXpXvYlHJwSYPQ0EtepKoiW28huKUsmpvYlUMtVyIZiUmeKzAo3e0RzTBc8JVxJYFYTkKcGoGZz89BmFBA==");
+                var collectionLink = UriFactory.CreateDocumentCollectionUri("userdatabase", "Customers");
+                FeedOptions queryOptions = new FeedOptions { MaxItemCount = -1 };
                 // docs added
 
                 // setup event grid
@@ -36,7 +42,22 @@ namespace DbAudit
 
                 foreach(var document in input)
                 {
-                    var order = JsonConvert.DeserializeObject<OrderModel>(document.ToString());
+                    OrderModel order = JsonConvert.DeserializeObject<OrderModel>(document.ToString());
+
+                    Customer queryCustomer = docClient.CreateDocumentQuery<Customer>(collectionLink, queryOptions)
+                                            .Where(f => f.PhoneNumber == order.CustomerContactNumber).FirstOrDefault();
+
+
+                    if (queryCustomer != null)
+                    {
+                        queryCustomer.Points += 100;
+                    }
+                    else
+                    {
+                        Customer newCustomer = new Customer() { Name = order.CustomerName, PhoneNumber = order.CustomerContactNumber, Points = 100, Email = order.CustomerEmail };
+                        await docClient.CreateDocumentAsync(collectionLink, newCustomer);
+                    }
+
                     foreach (var item in order.OrderItems)
                     {
                         var egevent = new
